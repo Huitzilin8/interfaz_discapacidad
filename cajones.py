@@ -1,6 +1,7 @@
 import threading
 import queue
 import time
+import re
 from utils import camara
 
 MAX_INTENTOS = 3
@@ -10,7 +11,7 @@ class CajonThread(threading.Thread):
     Representa el hilo de ejecución para un único cajón de estacionamiento.
     Gestiona el ciclo de vida de la verificación de un vehículo.
     """
-    def __init__(self, cajon_id: int, camara_lock: threading.Lock, stop_event: threading.Event, preset: int, result_queue: queue.Queue):
+    def __init__(self, cajon_id: int, camara_lock: threading.Lock, stop_event: threading.Event, preset: int, result_queue: queue.Queue, input_queue: queue.Queue):
         """
         Inicializa el hilo del cajón.
         
@@ -28,6 +29,7 @@ class CajonThread(threading.Thread):
         self.camara_lock = camara_lock
         self.stop_event = stop_event
         self.result_queue = result_queue
+        self.input_queue = input_queue
         self.daemon = True
 
     def solicitar_mover_camara(self):
@@ -35,9 +37,24 @@ class CajonThread(threading.Thread):
         self.camara_lock.acquire()
         print(f"[Cajón {self.cajon_id}]: Cámara adquirida. Moviendo a posición...")
         camara.camara_ir_a_preset(IP_camara='192.168.100.72',user='admin', password='Kalilinux363', preset=self.preset)
+        
+    @staticmethod
+    def hay_detecciones(linea):
+        match = re.search(r'\d+', linea)
+        return match > 0 if match is not None else False
+        
 
     def inferir(self):
-        pass
+        try:
+            item = self.input_queue.get_nowait()
+            ultima_data = item.get('data', None)
+            return self.hay_detecciones(ultima_data)
+        except queue.Empty:
+            return False   
+        except Exception as e:
+            print(f"[ALERTA] [Cajón {self.cajon_id}]: Excepcion en inferencia")
+            print(e)
+            return False 
         
 
     def liberar_uso_camara(self):

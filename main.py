@@ -19,9 +19,8 @@ user = "admin"
 password = "Kalilinux364"
 
 # Recursos compartidos
-
-queue_inferencias = queue.Queue(maxsize=1)
-queue_resultados = queue.Queue()
+queue_inferencias = queue.Queue(maxsize=1) # Para inferencias del modelo en el docker
+queue_resultados = queue.Queue() # Para los resultados de los cajones
 
 detection_lock = threading.Lock()
 
@@ -77,7 +76,8 @@ def crear_hilo_para_cajon(cajon_id):
             camara_lock=camara_lock,
             stop_event=stop_event,
             preset=cajones[cajon_id],
-            result_queue=queue_resultados
+            result_queue=queue_resultados,
+            input_queue=queue_inferencias
         )
         hilos_activos[cajon_id] = (thread, stop_event)
         thread.start() # Inicia la ejecución del método run() en el nuevo hilo

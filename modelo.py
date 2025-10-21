@@ -114,7 +114,7 @@ class YoloDockerThread(threading.Thread):
                 line = line.rstrip()
                 if line:
                     # Send output to queue for other threads
-                    self.output_queue.put({
+                    self.safe_put(self.output_queue,{
                         'type': 'stdout',
                         'data': line,
                         'timestamp': time.time()
@@ -127,7 +127,7 @@ class YoloDockerThread(threading.Thread):
             if self.process.returncode != 0:
                 stderr = self.process.stderr.read()
                 error_msg = f"Process exited with code {self.process.returncode}: {stderr}"
-                self.output_queue.put({
+                self.safe_put(self.output_queue,{
                     'type': 'error',
                     'data': error_msg,
                     'timestamp': time.time()
@@ -165,7 +165,6 @@ class YoloDockerThread(threading.Thread):
         self._remove_existing_container()
 
 
-# Example usage
 if __name__ == "__main__":
     
     # Create a queue for inter-thread communication
