@@ -1,7 +1,7 @@
 import threading
 import queue
 import time
-#import Jetson.GPIO as GPIO
+import Jetson.GPIO as GPIO
 from cajones import CajonThread
 from modelo import YoloDockerThread
 
@@ -32,15 +32,15 @@ cajon_key_counter = 0
 # Conexion partes fisicas
 # Fan Pin Configuration
 FAN_PIN = 33
-#GPIO.setmode(GPIO.BOARD)
-#GPIO.setup(FAN_PIN, GPIO.OUT)
-#fan_pwm = GPIO.PWM(FAN_PIN, 25000)
-#fan_pwm.start(0)
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(FAN_PIN, GPIO.OUT)
+fan_pwm = GPIO.PWM(FAN_PIN, 25000)
+fan_pwm.start(0)
 duty = 0
 # LED Pin Configuration
 LED_PIN = 18
-#GPIO.setmode(GPIO.BOARD)
-#GPIO.setup(LED_PIN, GPIO.OUT)
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(LED_PIN, GPIO.OUT)
 
 # --- Clases y Funciones de Simulación (para ignorar hardware real) ---
 
@@ -155,7 +155,7 @@ def ciclo_main():
             if temp > 50: duty = 100
             elif temp > 40: duty = 40
             else: duty = 0
-            #fan_pwm.ChangeDutyCycle(duty)
+            fan_pwm.ChangeDutyCycle(duty)
             end = time.time()
             if (end - start) > 10:
                 sensores[0].set_active(False)
@@ -166,13 +166,16 @@ def ciclo_main():
         print("\n--- Deteniendo el programa ---")
         for cajon_id in list(hilos_activos.keys()):
             matar_hilo_para_cajon(cajon_id)
-        #GPIO.cleanup()
+        GPIO.cleanup()
         print("Programa finalizado.")   
 
 if __name__ == "__main__":
     # 1. Configuración inicial: registrar los cajones y sus sensores simulados
+    crear_hilo_para_cajon(queue_inferencias)
+    
     insertar_cajon(preset= 1, sensor=MockSensor())
     insertar_cajon(preset= 2, sensor=MockSensor())
+    
     
     # 2. Simulación de eventos
     print("\n--- Simulación de Eventos ---")
