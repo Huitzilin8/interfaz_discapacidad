@@ -1,6 +1,7 @@
 import threading
 import queue
 import time
+import paho.mqtt.client as mqtt
 #import Jetson.GPIO as GPIO
 from cajones import CajonThread
 from modelo import YoloDockerThread
@@ -30,6 +31,13 @@ camara_lock = threading.Lock()
 # Para generar IDs de cajones únicos
 cajon_key_counter = 0
 
+# --- Configuración MQTT ---
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_PORT = 1883
+# Usamos un topic base. Nos suscribiremos a 'sensores/cajon/+/estado'
+# El '+' es un comodín para cualquier ID de cajón.
+MQTT_TOPIC_BASE = "sensores/cajon"
+
 # Conexion partes fisicas
 # Fan Pin Configuration
 FAN_PIN = 33
@@ -44,25 +52,57 @@ LED_PIN = 18
 #GPIO.setup(LED_PIN, GPIO.OUT)
 
 # --- Clases y Funciones de Simulación (para ignorar hardware real) ---
+def on_connect(client, userdata, flags, rc):
+    """Callback que se ejecuta cuando nos conectamos al broker."""
+    if rc == 0:
+        print(f"[MQTT]: Conectado exitosamente al broker {MQTT_BROKER}")
+        # Una vez conectados, (re)suscribimos a los topics de los cajones ya registrados
+        for cajon_id in cajones.keys():
+            topic = f"{MQTT_TOPIC_BASE}/{cajon_id}/estado"
+            client.subscribe(topic)
+            print(f"[MQTT]: Suscrito a {topic}")
+    else:
+        print(f"[MQTT]: Fallo en la conexión, código de retorno: {rc}")
 
-class MockSensor:
-    """Una clase para simular un sensor de presencia."""
-    def __init__(self, initial_state=False):
-        self._active = initial_state
-
-    def is_active(self):
-        return self._active
-
-    def set_active(self, state):
-        self._active = state
+def on_message(client, userdata, msg):
+    """Callback que se ejecuta cuando llega un mensaje."""
+    print(f"[MQTT]: Mensaje recibido! Topic: {msg.topic} | Payload: {msg.payload.decode()}")
+    
+    try:
+        # 1. Extraer el ID del cajón del topic
+        # El topic será "sensores/cajon/0/estado"
+        parts = msg.topic.split('/')
+        cajon_id = int(parts[2]) # Obtenemos el '0'
+        
+        # 2. Decodificar el mensaje (payload)
+        payload = msg.payload.decode().strip().upper()
+        
+        # 3. Actualizar el estado en nuestro diccionario 'sensores'
+        if cajon_id in sensores:
+            if payload == "ON":
+                sensores[cajon_id] = True
+                print(f"[MQTT]: Estado del Cajón {cajon_id} actualizado a: {sensores[cajon_id]}")
+            elif payload == "OFF":
+                sensores[cajon_id] = False
+                print(f"[MQTT]: Estado del Cajón {cajon_id} actualizado a: {sensores[cajon_id]}")
+            else:
+                print(f"[MQTT]: Payload '{payload}' no reconocido. Usar 'ON' o 'OFF'.")
+        else:
+            print(f"[MQTT]: ID de cajón {cajon_id} no reconocido.")
+            
+    except Exception as e:
+        print(f"[MQTT]: Error procesando mensaje: {e}")
 
 # --- Funciones Principales ---
 
-def insertar_cajon(preset: int, sensor: MockSensor):
+def insertar_cajon(preset: int):
     """Registra un nuevo cajón y su sensor asociado."""
     global cajon_key_counter
     cajones[cajon_key_counter] = preset
-    sensores[cajon_key_counter] = sensor
+    # --- Nos suscribimos al topic MQTT para este nuevo cajón ---
+    topic = f"{MQTT_TOPIC_BASE}/{cajon_key_counter}/estado"
+    client_mqtt.subscribe(topic)
+    print(f"[MQTT]: Suscrito a {topic}")
     print(f"[MAIN]: Cajón {cajon_key_counter} registrado con preset {preset}.")
     cajon_key_counter += 1
 
@@ -156,33 +196,44 @@ def ciclo_main():
             elif temp > 40: duty = 40
             else: duty = 0
             #fan_pwm.ChangeDutyCycle(duty)
-            end = time.time()
-            if (end - start) > 10:
-                sensores[0].set_active(False)
-                sensores[1].set_active(False)
-            time.sleep(1)
+            time.sleep(0.5) # Un pequeño sleep para no consumir 100% de CPU en este ciclo
 
     except KeyboardInterrupt:
         print("\n--- Deteniendo el programa ---")
         for cajon_id in list(hilos_activos.keys()):
             matar_hilo_para_cajon(cajon_id)
         #GPIO.cleanup()
-        print("Programa finalizado.")   
+        
+        client_mqtt.loop_stop() # --- NUEVO: Detener el hilo de MQTT ---
+        client_mqtt.disconnect()
+        #GPIO.cleanup()
+        print("Programa finalizado.")
 
 if __name__ == "__main__":
+
+    # --- Configuración e inicio del cliente MQTT ---
+    client_mqtt = mqtt.Client()
+    client_mqtt.on_connect = on_connect
+    client_mqtt.on_message = on_message
+
+    try:
+        client_mqtt.connect(MQTT_BROKER, MQTT_PORT, 60)
+    except Exception as e:
+        print(f"[MQTT]: No se pudo conectar al broker. ¿Hay conexión a internet? Error: {e}")
+        exit()
+
+    # client.loop_start() INICIA UN HILO EN SEGUNDO PLANO
+    # para manejar los callbacks de MQTT (conexión y mensajes).
+    # No bloquea el resto del script.
+    client_mqtt.loop_start()
+
+
     # 1. Configuración inicial: registrar los cajones y sus sensores simulados
-    insertar_cajon(preset= 1, sensor=MockSensor())
-    insertar_cajon(preset= 2, sensor=MockSensor())
-    
-    # 2. Simulación de eventos
-    print("\n--- Simulación de Eventos ---")
-    time.sleep(2)
-    print("\n>>> SIM: Un carro llega al cajón 0")
-    sensores[0].set_active(True)
-    
-    time.sleep(2)
-    print("\n>>> SIM: Otro carro llega al cajón 1")
-    sensores[1].set_active(True) # El hilo del cajón 1 esperará a que el 0 libere la cámara
-    
+    insertar_cajon(preset= 1)
+    insertar_cajon(preset= 2)
+   
+    # La simulación ahora es externa, desde tu app MQTT.
+    print("\n--- Esperando eventos MQTT ---")
+
     # 3. Iniciar el ciclo principal de monitoreo (que se ejecutará indefinidamente)
     ciclo_main()
