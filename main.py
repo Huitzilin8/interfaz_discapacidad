@@ -14,7 +14,7 @@ hilos_activos = {} # Clave: cajon_id, Valor: (thread_obj, stop_event), Para cajo
 hilo_dokcer = None
 
 # Credenciales e IP de camara
-camera_ip = "192.168.100.72"
+camera_ip = "192.168.100.189"
 user = "admin"
 password = "Kalilinux364"
 
