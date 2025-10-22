@@ -98,7 +98,12 @@ def on_message(client, userdata, msg):
 def insertar_cajon(preset: int):
     """Registra un nuevo cajón y su sensor asociado."""
     global cajon_key_counter
+    # 1. Se añade al diccionario de presets
     cajones[cajon_key_counter] = preset
+    # 2. Se añade al diccionario de estado
+    sensores[cajon_key_counter] = False 
+    print(f"[MAIN]: Cajón {cajon_key_counter} registrado con preset {preset}.")
+
     # --- Nos suscribimos al topic MQTT para este nuevo cajón ---
     topic = f"{MQTT_TOPIC_BASE}/{cajon_key_counter}/estado"
     client_mqtt.subscribe(topic)
@@ -125,11 +130,13 @@ def crear_hilo_para_cajon(cajon_id):
         print(f"[MAIN]: Intento de crear hilo para cajón {cajon_id}, pero ya existe uno.")
 
 def crear_hilo_para_docker():
-    if hilo_dokcer is not None:
+    global hilo_dokcer # Asegurarse de modificar la variable global
+    if hilo_dokcer is None: # Solo crear si NO existe
         print(f"[MAIN]: Creando hilo para docker...")
         hilo_dokcer = YoloDockerThread(
             output_queue=queue_inferencias
         )
+        # hilo_dokcer.start() # Probablemente necesites iniciarlo aquí
     else:
         print(f"[MAIN]: Intento de crear hilo para docker pero ya existe uno.")
 
@@ -166,14 +173,14 @@ def ciclo_main():
     try:
         while True:
             # 1. Monitorear sensores para crear/destruir hilos
-            for cajon_id, sensor in sensores.items():
+            for cajon_id, estado_sensor in sensores.items():
                 
                 # Caso 1: Hay un carro y NO hay un hilo activo para ese cajón
-                if sensor.is_active() and cajon_id not in hilos_activos:
+                if estado_sensor and cajon_id not in hilos_activos:
                     crear_hilo_para_cajon(cajon_id)
                 
                 # Caso 2: NO hay un carro y SÍ hay un hilo activo para ese cajón
-                elif not sensor.is_active() and cajon_id in hilos_activos:
+                elif not estado_sensor and cajon_id in hilos_activos:
                     # --- LÓGICA CORREGIDA ---
                     print(f"✅ [MAIN]: Carro se fue del cajón {cajon_id}. Torreta APAGADA.")
                     #GPIO.output(LED_PIN, GPIO.HIGH)
