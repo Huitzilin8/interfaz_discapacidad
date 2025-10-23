@@ -130,16 +130,19 @@ def crear_hilo_para_cajon(cajon_id):
     else:
         print(f"[MAIN]: Intento de crear hilo para cajón {cajon_id}, pero ya existe uno.")
 
+
 def crear_hilo_para_docker():
     global hilo_dokcer # Asegurarse de modificar la variable global
     if hilo_dokcer is None: # Solo crear si NO existe
         print(f"[MAIN]: Creando hilo para docker...")
         hilo_dokcer = YoloDockerThread(
-            output_queue=queue_inferencias
+            output_queue=queue_inferencias,
+            error_callback=manejar_error_docker
         )
-        # hilo_dokcer.start() # Probablemente necesites iniciarlo aquí
+        hilo_dokcer.start()
     else:
         print(f"[MAIN]: Intento de crear hilo para docker pero ya existe uno.")
+
 
 def matar_hilo_para_cajon(cajon_id):
     """Detiene de forma segura el hilo de un cajón específico."""
@@ -164,6 +167,9 @@ def get_cpu_temp():
                 return float(f.readline()) / 1000.0
         except Exception:
             return 0
+        
+def manejar_error_docker(error):
+    print(f"[DOCKER]: {error}")
 
 def ciclo_main():
     """
@@ -235,10 +241,12 @@ if __name__ == "__main__":
     # No bloquea el resto del script.
     client_mqtt.loop_start()
 
-    # Creando hilo para docker
-    crear_hilo_para_docker()
 
     # 1. Configuración inicial: registrar los cajones y sus sensores simulados
+    # Creando hilo para docker
+    crear_hilo_para_docker()
+    time.sleep(60)
+    
     insertar_cajon(preset= 1)
     insertar_cajon(preset= 2)
    
