@@ -7,25 +7,28 @@ import stat
 from typing import Callable, Optional
 
 class YoloDockerThread(threading.Thread):
-    def __init__(self, output_queue: queue.Queue, 
+    def __init__(self,
+                 input_queue: queue.Queue, 
+                 output_queue: queue.Queue, 
                  error_callback: Optional[Callable] = None,
                  docker_image: str = "ultralytics/onvif-persist:final-20251010",
-                 container_name: str = "ultralytics_trt_v2"):
+                 container_name_base: str = "ultralytics_trt_worker"):
         """
-        Thread to run YOLO prediction in Docker and stream output.
+        Thread de trabajo que espera trabajos de inferencia en una cola de entrada.
         
         Args:
-            output_queue: Queue to send output lines to other threads
-            error_callback: Optional callback function for errors
-            docker_image: Docker image to use
-            container_name: Name for the Docker container
+            input_queue: Cola de donde lee trabajos (ej: (cajon_id, "/path/to/img.jpg"))
+            output_queue: Cola donde pone resultados (ej: (cajon_id, True))
+            error_callback: Opcional
+            docker_image: Imagen de Docker
+            container_name_base: Nombre base para el contenedor
         """
         super().__init__(daemon=True)
+        self.input_queue = input_queue
         self.output_queue = output_queue
         self.error_callback = error_callback
         self.docker_image = docker_image
-        self.container_name = container_name
-        self.process = None
+        self.container_name = f"{container_name_base}_{os.getpid()}" # Nombre único
         self._stop_event = threading.Event()
         
     def _remove_existing_container(self):
@@ -54,102 +57,111 @@ class YoloDockerThread(threading.Thread):
             except Exception as e:
                 print(f"Warning: Could not set permissions on venv: {e}")
     
-    def safe_put(q: queue.Queue, item):
-        if q.full():
-            try:
-                q.get_nowait()
-            except queue.Empty:
-                pass
-        q.put_nowait()
+    def _parse_yolo_output(self, stdout: str) -> bool:
+        """
+        Revisa el stdout de YOLO para ver si hubo una detección exitosa.
+        """
+        print(f"[YOLO-WORKER] Salida de YOLO:\n{stdout}")
+        # Ejemplo: lo que el modelo detecta
+        if "1 carro" in stdout: # O "1 person", "1 object", etc.
+            print("[YOLO-WORKER] ¡Detección exitosa encontrada!")
+            return True
+        
+        # Ejemplo 2: si solo te importa que haya detectado ALGO
+        # (La línea "image 1/1..." siempre aparece si procesa)
+        for line in stdout.splitlines():
+            if line.startswith("image 1/1") and "Done" in line:
+                if "no objects detected" in line:
+                    continue # Esto no es un éxito
+                if "1 car" in line or "1 person" in line: # AJUSTAR
+                    print("[YOLO-WORKER] ¡Detección exitosa encontrada!")
+                    return True
+
+        print("[YOLO-WORKER] No se encontró detección de interés.")
+        return False
     
     def run(self):
-        """Run the Docker container and stream output."""
-        # Clean up any existing container first
-        self._remove_existing_container()
+        """
+        Ciclo principal del trabajador: esperar trabajo, ejecutar Docker, poner resultado.
+        """
         
         # Ensure proper permissions before starting
         self._ensure_venv_permissions()
         
-        # Command that activates venv and runs YOLO
-        # Using bash -l to load login shell environment
-        bash_cmd = (
-            "bash -lc '"
-            "source /ultralytics/venvs/onvif_env/bin/activate && "
-            "yolo predict "
-            "model=far_signals3_elmejor.engine "
-            "source=rtsp://admin:Kalilinux363@192.168.100.72:554/stream "
-            "imgsz=640,640 "
-            "conf=0.30"
-            "'"
-        )
+        while not self._stop_event.is_set():
+            try:
+                # 1. Esperar un trabajo de la cola de entrada
+                # El trabajo es una tupla: (cajon_id, ruta_de_la_imagen)
+                cajon_id, image_path = self.input_queue.get(timeout=1)
+                
+                print(f"[YOLO-WORKER]: Recibido trabajo para Cajón {cajon_id} en imagen {image_path}")
+
+                # 2. Limpiar contenedor anterior (por si acaso)
+                self._remove_existing_container()
+
+                # 3. Construir el comando de Docker DINÁMICAMENTE
+                bash_cmd = (
+                    "bash -lc '"
+                    "source /ultralytics/venvs/onvif_env/bin/activate && "
+                    "yolo predict "
+                    "model=far_signals3_elmejor.engine "
+                    f"source={image_path} "  # <-- ¡Usamos la imagen del trabajo!
+                    #"source=rtsp://admin:Kalilinux363@192.168.100.72:554/stream "
+                    "imgsz=640,640 "
+                    "conf=0.30"
+                    "save=False " # No necesitamos guardar la imagen
+                    "'"
+                )
+                
+                docker_cmd = [
+                    'sudo', 'docker', 'run',
+                    '--runtime=nvidia',
+                    '--ipc=host',
+                    '--network', 'host',
+                    '--name', self.container_name,
+                    '-v', '/media/nvidia/jetson_sd/ultralytics:/ultralytics',
+                    # ¡IMPORTANTE! Mapear el directorio donde se guardan las capturas
+                    # Asumo que las capturas se guardan en /tmp
+                    '-v', '/tmp:/tmp',
+                    '--device', '/dev/bus/usb:/dev/bus/usb',
+                    '--device-cgroup-rule=c 81:* rmw',
+                    '--device-cgroup-rule=c 189:* rmw',
+                    self.docker_image,
+                    'bash', '-c', bash_cmd
+                ]
+                
+                # 4. Ejecutar el comando y ESPERAR a que termine
+                process = subprocess.run(
+                    docker_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30  # Timeout de 30 segundos
+                )
+
+                # 5. Analizar el resultado
+                exito = False
+                if process.returncode == 0:
+                    exito = self._parse_yolo_output(process.stdout)
+                else:
+                    print(f"[YOLO-WORKER] Error de Docker (stderr): {process.stderr}")
+
+                # 6. Poner el resultado en la cola de salida
+                self.output_queue.put((cajon_id, exito))
+                self.input_queue.task_done()
         
-        docker_cmd = [
-            'sudo', 'docker', 'run',
-            '--runtime=nvidia',
-            '--ipc=host',
-            '--network', 'host',
-            '--name', self.container_name,
-            '-v', '/media/nvidia/jetson_sd/ultralytics:/ultralytics',
-            '--device', '/dev/bus/usb:/dev/bus/usb',
-            '--device-cgroup-rule=c 81:* rmw',
-            '--device-cgroup-rule=c 189:* rmw',
-            self.docker_image,
-            'bash', '-c', bash_cmd
-        ]
-        
-        try:
-            self.process = subprocess.Popen(
-                docker_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                bufsize=1
-            )
-            
-            # Read stdout in real-time
-            for line in iter(self.process.stdout.readline, ''):
-                if self._stop_event.is_set():
-                    break
-                    
-                line = line.rstrip()
-                if line:
-                    # Send output to queue for other threads
-                    self.output_queue.put({
-                        'type': 'stdout',
-                        'data': line,
-                        'timestamp': time.time()
-                    })
-            
-            # Wait for process to complete
-            self.process.wait()
-            
-            # Check for errors
-            if self.process.returncode != 0:
-                stderr = self.process.stderr.read()
-                error_msg = f"Process exited with code {self.process.returncode}: {stderr}"
-                self.output_queue.put({
-                    'type': 'error',
-                    'data': error_msg,
-                    'timestamp': time.time()
-                })
+            except queue.Empty:
+                # No hay trabajos, solo volvemos a intertar (comportamiento normal)
+                continue
+            except Exception as e:
+                print(f"[YOLO-WORKER] Excepción en el hilo: {e}")
                 if self.error_callback:
-                    self.error_callback(error_msg)
-                    
-        except Exception as e:
-            error_msg = f"Exception in YOLO thread: {str(e)}"
-            self.safe_put(self.output_queue,{
-                'type': 'error',
-                'data': error_msg,
-                'timestamp': time.time()
-            })
-            if self.error_callback:
-                self.error_callback(error_msg)
-        finally:
-            self.safe_put(self.output_queue,{
-                'type': 'stopped',
-                'data': 'Thread stopped',
-                'timestamp': time.time()
-            })
+                    self.error_callback(str(e))
+                # Si un trabajo falla, es mejor notificarlo como fallo
+                # (Necesitaríamos guardar cajon_id fuera del try para esto)
+            finally:
+                # Limpiar el contenedor después de cada ejecución
+                self._remove_existing_container()
+
     
     def stop(self):
         """Stop the thread and kill the Docker process."""
@@ -168,43 +180,26 @@ class YoloDockerThread(threading.Thread):
 # Example usage
 if __name__ == "__main__":
     
-    # Create a queue for inter-thread communication
-    output_queue = queue.Queue()
+    print("Este script está diseñado para ser importado, no ejecutado directamente.")
+    print("Iniciando prueba de trabajador...")
     
-    def handle_error(error_msg):
-        print(f"ERROR: {error_msg}")
+    in_q = queue.Queue()
+    out_q = queue.Queue()
     
-    # Create and start the YOLO thread
-    yolo_thread = YoloDockerThread(
-        output_queue=output_queue,
-        error_callback=handle_error
-    )
-    yolo_thread.start()
+    worker = YoloDockerThread(in_q, out_q)
+    worker.start()
     
-    # Consumer thread example - reads from queue
-    def consumer_thread():
-        while True:
-            try:
-                msg = output_queue.get(timeout=1)
-                if msg['type'] == 'stdout':
-                    print(f"[YOLO OUTPUT] {msg['data']}")
-                elif msg['type'] == 'error':
-                    print(f"[ERROR] {msg['data']}")
-                elif msg['type'] == 'stopped':
-                    print(f"[INFO] {msg['data']}")
-                    break
-                output_queue.task_done()
-            except queue.Empty:
-                continue
+    print("Enviando trabajo de prueba (requiere imagen en /tmp/test.jpg)...")
+    # Para probar: pon una imagen en /tmp/test.jpg
+    # sudo cp tu_imagen.jpg /tmp/test.jpg
+    in_q.put((99, "/tmp/test.jpg"))
     
-    # Start consumer thread
-    consumer = threading.Thread(target=consumer_thread, daemon=True)
-    consumer.start()
-    
-    # Run for some time or until interrupted
     try:
-        yolo_thread.join()  # Wait for YOLO thread to finish
-    except KeyboardInterrupt:
-        print("\nStopping...")
-        yolo_thread.stop()
-        yolo_thread.join(timeout=10)
+        result = out_q.get(timeout=45)
+        print(f"Resultado recibido: {result}")
+    except queue.Empty:
+        print("Prueba fallida: No se recibió respuesta del trabajador.")
+    
+    worker.stop()
+    worker.join()
+    print("Prueba finalizada.")

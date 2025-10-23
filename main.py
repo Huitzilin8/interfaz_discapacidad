@@ -17,7 +17,8 @@ hilo_dokcer = None
 # Credenciales e IP de camara
 camera_ip = "192.168.100.72"
 user = "admin"
-password = "Kalilinux364"
+password = "Kalilinux363"
+rtsp_stream_path = "stream" # O "stream1", "stream/main", etc.
 
 # Recursos compartidos
 
@@ -122,21 +123,29 @@ def crear_hilo_para_cajon(cajon_id):
             camara_lock=camara_lock,
             stop_event=stop_event,
             preset=cajones[cajon_id],
-            result_queue=queue_resultados
+            inference_queue=queue_inferencias, # <--- Pasamos la cola de trabajos
+            camera_ip=camera_ip,               # <--- Pasamos credenciales
+            user=user,
+            password=password,
+            rtsp_stream=rtsp_stream_path
         )
+        
         hilos_activos[cajon_id] = (thread, stop_event)
         thread.start() # Inicia la ejecución del método run() en el nuevo hilo
     else:
         print(f"[MAIN]: Intento de crear hilo para cajón {cajon_id}, pero ya existe uno.")
 
 def crear_hilo_para_docker():
-    global hilo_dokcer # Asegurarse de modificar la variable global
+    global hilo_dokcer 
     if hilo_dokcer is None: # Solo crear si NO existe
-        print(f"[MAIN]: Creando hilo para docker...")
+        print(f"[MAIN]: Creando hilo trabajador de Docker...")
+        
+        # --- MODIFICADO: Pasamos ambas colas ---
         hilo_dokcer = YoloDockerThread(
-            output_queue=queue_inferencias
+            input_queue=queue_inferencias,  # Aquí se ponen los trabajos
+            output_queue=queue_resultados # De aquí se leen los resultados
         )
-        # hilo_dokcer.start() # Probablemente necesites iniciarlo aquí
+        hilo_dokcer.start() # --- ¡IMPORTANTE: Iniciarlo! ---
     else:
         print(f"[MAIN]: Intento de crear hilo para docker pero ya existe uno.")
 
@@ -234,8 +243,12 @@ if __name__ == "__main__":
     # No bloquea el resto del script.
     client_mqtt.loop_start()
 
+    # --- NUEVO: Iniciar el hilo trabajador de Docker ---
+    # Debe iniciarse UNA VEZ al principio.
+    crear_hilo_para_docker()
 
-    # 1. Configuración inicial: registrar los cajones y sus sensores simulados
+    # 1. Configuración inicial: registrar los cajones
+    print("Registrando cajones...")
     insertar_cajon(preset= 1)
     insertar_cajon(preset= 2)
    
