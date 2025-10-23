@@ -108,6 +108,7 @@ class YoloDockerThread(threading.Thread):
                 universal_newlines=True,
                 bufsize=1
             )
+            print("[DOCKER]: Iniciando docker")
             
             # Read stdout in real-time
             for line in iter(self.process.stdout.readline, ''):
@@ -115,6 +116,7 @@ class YoloDockerThread(threading.Thread):
                     break
                     
                 line = line.rstrip()
+                print(f"[DOCKER]: {line}")
                 if line:
                     # Send output to queue for other threads
                     self.safe_put(self.output_queue,{
