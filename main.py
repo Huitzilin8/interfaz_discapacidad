@@ -86,6 +86,7 @@ def crear_hilo_para_cajon(cajon_id):
 
 def crear_hilo_para_docker():
     global hilo_docker
+    print(hilo_docker)
     if hilo_docker is not None:
         print(f"[MAIN]: Creando hilo para docker...")
         hilo_docker = YoloDockerThread(
