@@ -122,7 +122,8 @@ def crear_hilo_para_cajon(cajon_id):
             camara_lock=camara_lock,
             stop_event=stop_event,
             preset=cajones[cajon_id],
-            result_queue=queue_resultados
+            result_queue=queue_resultados,
+            input_queue=queue_inferencias
         )
         hilos_activos[cajon_id] = (thread, stop_event)
         thread.start() # Inicia la ejecución del método run() en el nuevo hilo
@@ -234,6 +235,8 @@ if __name__ == "__main__":
     # No bloquea el resto del script.
     client_mqtt.loop_start()
 
+    # Creando hilo para docker
+    crear_hilo_para_docker()
 
     # 1. Configuración inicial: registrar los cajones y sus sensores simulados
     insertar_cajon(preset= 1)
