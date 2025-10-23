@@ -80,7 +80,7 @@ class YoloDockerThread(threading.Thread):
             "cd models;"
             "yolo predict "
             "model=far_signals3_elmejor.engine "
-            "source=rtsp://admin:Kalilinux363@192.168.100.72:554/stream "
+            "source=rtsp://admin:Kalilinux363@192.168.100.189:554/stream "
             "imgsz=640,640 "
             "conf=0.30"
             "'"
