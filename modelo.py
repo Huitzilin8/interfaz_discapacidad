@@ -87,7 +87,7 @@ class YoloDockerThread(threading.Thread):
         )
         
         docker_cmd = [
-            'sudo', 'docker', 'run',
+            'docker', 'run',
             '--runtime=nvidia',
             '--ipc=host',
             '--network', 'host',
