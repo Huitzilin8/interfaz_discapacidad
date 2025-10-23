@@ -77,7 +77,7 @@ class YoloDockerThread(threading.Thread):
         bash_cmd = (
             "bash -lc '"
             "source /ultralytics/venvs/onvif_env/bin/activate && "
-            "cd /models"
+            "cd /models;"
             "yolo predict "
             "model=far_signals3_elmejor.engine "
             "source=rtsp://admin:Kalilinux363@192.168.100.72:554/stream "
