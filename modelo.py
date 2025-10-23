@@ -32,12 +32,13 @@ class YoloDockerThread(threading.Thread):
         """Remove existing container if it exists."""
         try:
             subprocess.run(
-                ['sudo', 'docker', 'rm', self.container_name],
-                capture_output=True,
+                ['sudo', 'docker', 'rm', '--force', self.container_name],
                 timeout=10
             )
-        except Exception:
-            pass  # Container might not exist, which is fine
+            print("[DOCKER] Docker removido con exito")
+        except Exception as e:
+            print("[Docker] Docker no fue removido")
+            print(e)# Container might not exist, which is fine
     
     def _ensure_venv_permissions(self):
         """Ensure venv directory has proper permissions."""
@@ -53,14 +54,15 @@ class YoloDockerThread(threading.Thread):
                             stat.S_IROTH | stat.S_IXOTH)
             except Exception as e:
                 print(f"Warning: Could not set permissions on venv: {e}")
-    
+                
+    @staticmethod
     def safe_put(q: queue.Queue, item):
         if q.full():
             try:
                 q.get_nowait()
             except queue.Empty:
                 pass
-        q.put_nowait()
+        q.put_nowait(item)
     
     def run(self):
         """Run the Docker container and stream output."""
@@ -75,9 +77,10 @@ class YoloDockerThread(threading.Thread):
         bash_cmd = (
             "bash -lc '"
             "source /ultralytics/venvs/onvif_env/bin/activate && "
+            "cd models;"
             "yolo predict "
             "model=far_signals3_elmejor.engine "
-            "source=rtsp://admin:Kalilinux363@192.168.100.72:554/stream "
+            "source=rtsp://admin:Kalilinux363@192.168.100.189:554/stream "
             "imgsz=640,640 "
             "conf=0.30"
             "'"
@@ -112,9 +115,10 @@ class YoloDockerThread(threading.Thread):
                     break
                     
                 line = line.rstrip()
+                print(f"[DOCKER]: {line}")
                 if line:
                     # Send output to queue for other threads
-                    self.output_queue.put({
+                    self.safe_put(self.output_queue,{
                         'type': 'stdout',
                         'data': line,
                         'timestamp': time.time()
@@ -127,7 +131,7 @@ class YoloDockerThread(threading.Thread):
             if self.process.returncode != 0:
                 stderr = self.process.stderr.read()
                 error_msg = f"Process exited with code {self.process.returncode}: {stderr}"
-                self.output_queue.put({
+                self.safe_put(self.output_queue,{
                     'type': 'error',
                     'data': error_msg,
                     'timestamp': time.time()
@@ -165,7 +169,6 @@ class YoloDockerThread(threading.Thread):
         self._remove_existing_container()
 
 
-# Example usage
 if __name__ == "__main__":
     
     # Create a queue for inter-thread communication
