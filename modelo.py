@@ -33,7 +33,6 @@ class YoloDockerThread(threading.Thread):
         try:
             subprocess.run(
                 ['sudo', 'docker', 'rm', self.container_name],
-                capture_output=True,
                 timeout=10
             )
             print("[DOCKER] Docker removido con exito")
@@ -55,6 +54,7 @@ class YoloDockerThread(threading.Thread):
                             stat.S_IROTH | stat.S_IXOTH)
             except Exception as e:
                 print(f"Warning: Could not set permissions on venv: {e}")
+                
     @staticmethod
     def safe_put(q: queue.Queue, item):
         if q.full():
