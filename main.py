@@ -153,15 +153,16 @@ def ciclo_main():
 
             # 3. Monitoreo de temperatura
             temp = get_cpu_temp()
-            if temp > 50: duty = 100
-            elif temp > 40: duty = 40
-            else: duty = 0
+            if temp > 50: 
+                duty = 100
+                print(f"[Main]: Ventilador maxima potencia")
+            elif temp > 40: 
+                duty = 40
+                print(f"[Main]: Ventilador mediana potencia")
+            else: 
+                duty = 0
+                print(f"[Main]: Ventilador apagado potencia")
 #            fan_pwm.ChangeDutyCycle(duty)
-            end = time.time()
-            if (end - start) > 10:
-                sensores[0].set_active(False)
-                sensores[1].set_active(False)
-            time.sleep(1)
 
     except KeyboardInterrupt:
         print("\n--- Deteniendo el programa ---")
