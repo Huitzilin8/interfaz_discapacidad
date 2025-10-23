@@ -177,6 +177,7 @@ def ciclo_main():
 if __name__ == "__main__":
     # 1. Configuración inicial: registrar los cajones y sus sensores simulados
     crear_hilo_para_docker()
+    time.sleep(60)
     
     insertar_cajon(preset= 1, sensor=MockSensor())
     insertar_cajon(preset= 2, sensor=MockSensor())
