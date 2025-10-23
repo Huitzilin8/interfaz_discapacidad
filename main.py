@@ -155,13 +155,10 @@ def ciclo_main():
             temp = get_cpu_temp()
             if temp > 50: 
                 duty = 100
-                print(f"[Main]: Ventilador maxima potencia")
             elif temp > 40: 
                 duty = 40
-                print(f"[Main]: Ventilador mediana potencia")
             else: 
                 duty = 0
-                print(f"[Main]: Ventilador apagado potencia")
 #            fan_pwm.ChangeDutyCycle(duty)
 
     except KeyboardInterrupt:
