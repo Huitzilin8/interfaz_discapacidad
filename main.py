@@ -11,7 +11,7 @@ from modelo import YoloDockerThread
 cajones = {}
 sensores = {}
 hilos_activos = {} # Clave: cajon_id, Valor: (thread_obj, stop_event), Para cajones solamente
-hilo_dokcer = None
+hilo_docker = None
 
 # Credenciales e IP de camara
 camera_ip = "192.168.100.189"
@@ -85,9 +85,10 @@ def crear_hilo_para_cajon(cajon_id):
         print(f"[MAIN]: Intento de crear hilo para cajón {cajon_id}, pero ya existe uno.")
 
 def crear_hilo_para_docker():
-    if hilo_dokcer is not None:
+    global hilo_docker
+    if hilo_docker is not None:
         print(f"[MAIN]: Creando hilo para docker...")
-        hilo_dokcer = YoloDockerThread(
+        hilo_docker = YoloDockerThread(
             output_queue=queue_inferencias
         )
     else:
