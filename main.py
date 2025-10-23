@@ -93,6 +93,7 @@ def crear_hilo_para_docker():
             error_callback=manejar_error_docker
         )
         print(f"[MAIN]: Hilo de docker creado en {hilo_docker}")
+        hilo_docker.start()
     else:
         print(f"[MAIN]: Intento de crear hilo para docker pero ya existe uno.")
 
