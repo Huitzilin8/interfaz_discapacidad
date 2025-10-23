@@ -48,8 +48,10 @@ class CajonThread(threading.Thread):
         try:
             item = self.input_queue.get_nowait()
             ultima_data = item.get('data', None)
+            print(f"[Cajon {self.cajon_id}]: {ultima_data}")
             return self.hay_detecciones(ultima_data)
         except queue.Empty:
+            print(f"[ALERTA] Cola vacia")
             return False   
         except Exception as e:
             print(f"[ALERTA] [Cajón {self.cajon_id}]: Excepcion en inferencia")
