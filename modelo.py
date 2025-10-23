@@ -77,8 +77,8 @@ class YoloDockerThread(threading.Thread):
         bash_cmd = (
             "bash -lc '"
             "source /ultralytics/venvs/onvif_env/bin/activate && "
-            "cd /models;"
-            "ls"
+            "cd models;"
+            "ls "
             "'"
         )
         
