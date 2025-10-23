@@ -32,7 +32,7 @@ class YoloDockerThread(threading.Thread):
         """Remove existing container if it exists."""
         try:
             subprocess.run(
-                ['sudo', 'docker', 'rm', self.container_name],
+                ['sudo', 'docker', 'rm', '--force', self.container_name],
                 timeout=10
             )
             print("[DOCKER] Docker removido con exito")
