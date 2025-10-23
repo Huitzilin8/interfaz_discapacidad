@@ -89,7 +89,8 @@ def crear_hilo_para_docker():
     if hilo_docker is None:
         print(f"[MAIN]: Creando hilo para docker...")
         hilo_docker = YoloDockerThread(
-            output_queue=queue_inferencias
+            output_queue=queue_inferencias,
+            error_callback=manejar_error_docker
         )
         print(f"[MAIN]: Hilo de docker creado en {hilo_docker}")
     else:
@@ -118,6 +119,9 @@ def get_cpu_temp():
                 return float(f.readline()) / 1000.0
         except Exception:
             return 0
+
+def manejar_error_docker(error):
+    print(f"[DOCKER]: {error}")
 
 def ciclo_main():
     """
