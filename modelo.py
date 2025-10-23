@@ -37,8 +37,9 @@ class YoloDockerThread(threading.Thread):
                 timeout=10
             )
             print("[DOCKER] Docker removido con exito")
-        except Exception:
-            print("[Docker] Docker no fue removido")  # Container might not exist, which is fine
+        except Exception as e:
+            print("[Docker] Docker no fue removido")
+            print(e)# Container might not exist, which is fine
     
     def _ensure_venv_permissions(self):
         """Ensure venv directory has proper permissions."""
@@ -61,7 +62,7 @@ class YoloDockerThread(threading.Thread):
                 q.get_nowait()
             except queue.Empty:
                 pass
-        q.put_nowait()
+        q.put_nowait(item)
     
     def run(self):
         """Run the Docker container and stream output."""
