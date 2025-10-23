@@ -1,7 +1,7 @@
 import threading
 import queue
 import time
-#import Jetson.GPIO as GPIO
+import Jetson.GPIO as GPIO
 from cajones import CajonThread
 from modelo import YoloDockerThread
 
@@ -32,15 +32,15 @@ cajon_key_counter = 0
 # Conexion partes fisicas
 # Fan Pin Configuration
 FAN_PIN = 33
-#GPIO.setmode(GPIO.BOARD)
-#GPIO.setup(FAN_PIN, GPIO.OUT)
-#fan_pwm = GPIO.PWM(FAN_PIN, 25000)
-#fan_pwm.start(0)
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(FAN_PIN, GPIO.OUT)
+fan_pwm = GPIO.PWM(FAN_PIN, 25000)
+fan_pwm.start(0)
 duty = 0
 # LED Pin Configuration
-#LED_PIN = 18
-#GPIO.setmode(GPIO.BOARD)
-#GPIO.setup(LED_PIN, GPIO.OUT)
+LED_PIN = 18
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(LED_PIN, GPIO.OUT)
 
 # --- Clases y Funciones de Simulación (para ignorar hardware real) ---
 
@@ -91,6 +91,7 @@ def crear_hilo_para_docker():
         hilo_docker = YoloDockerThread(
             output_queue=queue_inferencias
         )
+        print(f"[MAIN]: Hilo de docker creado en {hilo_docker}")
     else:
         print(f"[MAIN]: Intento de crear hilo para docker pero ya existe uno.")
 
@@ -159,13 +160,13 @@ def ciclo_main():
                 duty = 40
             else: 
                 duty = 0
-#            fan_pwm.ChangeDutyCycle(duty)
+            fan_pwm.ChangeDutyCycle(duty)
 
     except KeyboardInterrupt:
         print("\n--- Deteniendo el programa ---")
         for cajon_id in list(hilos_activos.keys()):
             matar_hilo_para_cajon(cajon_id)
-#        GPIO.cleanup()
+        GPIO.cleanup()
         print("Programa finalizado.")   
 
 if __name__ == "__main__":
